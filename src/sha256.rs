@@ -1,6 +1,6 @@
 use crate::{
     hash::{DynHashAlgorithm, HashAlgorithm, Update},
-    impl_dynhash_from_hash,
+    impl_dynhash_from_hash, impl_write_from_update,
 };
 
 pub const K: [u32; 64] = [
@@ -155,6 +155,8 @@ impl Update for SHA256 {
         );
     }
 }
+
+impl_write_from_update!(SHA256);
 
 impl HashAlgorithm for SHA256 {
     const DIGEST_SIZE: usize = 32;

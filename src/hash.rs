@@ -28,3 +28,18 @@ macro_rules! impl_dynhash_from_hash {
         }
     };
 }
+
+#[macro_export]
+macro_rules! impl_write_from_update {
+    ($t: ty) => {
+        impl std::io::Write for $t {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.update(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+    };
+}

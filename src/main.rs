@@ -11,13 +11,10 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use hash::{HashAlgorithm, Update};
+use hash::DynHashAlgorithm;
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(short, long, default_value_t = 0x1000)]
-    chunk_size: usize,
-
     input: Option<PathBuf>,
 }
 
@@ -37,24 +34,12 @@ fn main() -> Result<()> {
     let mut input = open_or_stdin(args.input)?;
 
     let mut hasher = sha256::SHA256::default();
-    loop {
-        let mut buffer = vec![0u8; args.chunk_size];
-        let size = input.read(&mut buffer)?;
-        if size == 0 {
-            break;
-        }
-        hasher.update(&buffer[..size]);
-    }
+
+    std::io::copy(&mut input, &mut hasher)?;
 
     let hash = hasher.finalize();
 
-    println!(
-        "{}",
-        hash.iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect::<Vec<_>>()
-            .join("")
-    );
+    println!("{}", hash.iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<_>>().join(""));
 
     Ok(())
 }
