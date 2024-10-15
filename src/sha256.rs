@@ -1,3 +1,5 @@
+use crate::{hash::{DynHashAlgorithm, HashAlgorithm, Update}, impl_dynhash_from_hash};
+
 pub const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -33,23 +35,15 @@ pub fn sig1(x: u32) -> u32 {
     x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
 }
 
-pub struct SHA256Context {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SHA256 {
     data: [u8; 64],
     datalen: usize,
     bitlen: u64,
     state: [u32; 8],
 }
 
-impl SHA256Context {
-    pub fn new() -> Self {
-        Self {
-            data: [0u8; 0x40],
-            datalen: 0,
-            bitlen: 0,
-            state: [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19],
-        }
-    }
-
+impl SHA256 {
     pub fn transform(&mut self) {
         log::info!("SHA256 Transform: state={:08x?} data={:02x?}", self.state, self.data);
 
@@ -100,8 +94,21 @@ impl SHA256Context {
 
         log::info!("SHA256 Transform: state={:08x?}", self.state);
     }
+}
 
-    pub fn update(&mut self, data: &[u8]) {
+impl Default for SHA256 {
+    fn default() -> Self {
+        Self {
+            data: [0u8; 0x40],
+            datalen: 0,
+            bitlen: 0,
+            state: [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19],
+        }
+    }
+}
+
+impl Update for SHA256 {
+    fn update(&mut self, data: &[u8]) {
         log::info!("SHA256 Update: datalen={:2} bitlen={:016x} data={:02x?}", self.datalen, self.bitlen, data);
 
         for x in data {
@@ -116,8 +123,12 @@ impl SHA256Context {
 
         log::info!("SHA256 Update: datalen={:2} bitlen={:016x}", self.datalen, self.bitlen);
     }
+}
 
-    pub fn finalize(&mut self) -> [u8; 32] {
+impl HashAlgorithm for SHA256 {
+    const DIGEST_SIZE: usize = 32;
+
+    fn finalize(mut self) -> [u8; 32] {
         log::info!("SHA256 Finalize: datalen={:2} bitlen={:016x}", self.datalen, self.bitlen);
 
         self.bitlen += 8 * self.datalen as u64;
@@ -157,3 +168,4 @@ impl SHA256Context {
     }
 }
 
+impl_dynhash_from_hash!(SHA256);

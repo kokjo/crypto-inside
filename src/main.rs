@@ -1,10 +1,50 @@
+#![feature(generic_const_exprs)]
+
+pub mod hash;
 pub mod sha256;
 
-fn main() {
+use std::{fs::File, io::{stdin, Read}, path::PathBuf};
+
+use anyhow::{Context, Result};
+use clap::Parser;
+use hash::{HashAlgorithm, Update};
+
+#[derive(Debug, Parser)]
+struct Args {
+    #[arg(short, long, default_value_t=0x1000)]
+    chunk_size: usize,
+
+    input: Option<PathBuf>
+}
+
+fn open_or_stdin(path: Option<PathBuf>) -> Result<Box<dyn Read>> {
+    Ok(if let Some(path) = path {
+        Box::new(File::open(&path).context(format!("Could not open {:?}", &path))?)
+    } else {
+        Box::new(stdin().lock())
+    })
+}
+
+fn main() -> Result<()> {
     env_logger::init();
 
-    let mut hasher = sha256::SHA256Context::new();
-    hasher.update(&[0x48, 0x03, 0x00, 0xbc, 0x6c, 0x20, 0x18, 0x06, 0x70, 0x3f, 0x0f, 0xe2, 0x6c, 0x20, 0x98, 0x1e]);
+    let args = Args::parse();
 
-    log::info!("final hash = {:02x?}", hasher.finalize());
+    let mut input = open_or_stdin(args.input)?;
+
+    let mut hasher = sha256::SHA256::default();
+    loop {
+        let mut buffer = vec![0u8; args.chunk_size];
+        let size = input.read(&mut buffer)?;
+        if size == 0 {
+            break
+        }
+        hasher.update(&buffer[..size]);
+    }
+
+    let hash = hasher.finalize();
+
+    println!("{}", hash.iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<_>>().join(""));
+
+    Ok(())
 }
