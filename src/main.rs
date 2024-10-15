@@ -3,7 +3,11 @@
 pub mod hash;
 pub mod sha256;
 
-use std::{fs::File, io::{stdin, Read}, path::PathBuf};
+use std::{
+    fs::File,
+    io::{stdin, Read},
+    path::PathBuf,
+};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -11,10 +15,10 @@ use hash::{HashAlgorithm, Update};
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(short, long, default_value_t=0x1000)]
+    #[arg(short, long, default_value_t = 0x1000)]
     chunk_size: usize,
 
-    input: Option<PathBuf>
+    input: Option<PathBuf>,
 }
 
 fn open_or_stdin(path: Option<PathBuf>) -> Result<Box<dyn Read>> {
@@ -37,14 +41,20 @@ fn main() -> Result<()> {
         let mut buffer = vec![0u8; args.chunk_size];
         let size = input.read(&mut buffer)?;
         if size == 0 {
-            break
+            break;
         }
         hasher.update(&buffer[..size]);
     }
 
     let hash = hasher.finalize();
 
-    println!("{}", hash.iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<_>>().join(""));
+    println!(
+        "{}",
+        hash.iter()
+            .map(|byte| format!("{:02x}", byte))
+            .collect::<Vec<_>>()
+            .join("")
+    );
 
     Ok(())
 }

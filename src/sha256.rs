@@ -1,4 +1,7 @@
-use crate::{hash::{DynHashAlgorithm, HashAlgorithm, Update}, impl_dynhash_from_hash};
+use crate::{
+    hash::{DynHashAlgorithm, HashAlgorithm, Update},
+    impl_dynhash_from_hash,
+};
 
 pub const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -8,7 +11,7 @@ pub const K: [u32; 64] = [
     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
 pub fn ch(x: u32, y: u32, z: u32) -> u32 {
@@ -16,7 +19,7 @@ pub fn ch(x: u32, y: u32, z: u32) -> u32 {
 }
 
 pub fn maj(x: u32, y: u32, z: u32) -> u32 {
-    (x & y) ^ ( x & z) ^ (y & z)
+    (x & y) ^ (x & z) ^ (y & z)
 }
 
 pub fn ep0(x: u32) -> u32 {
@@ -45,23 +48,30 @@ pub struct SHA256 {
 
 impl SHA256 {
     pub fn transform(&mut self) {
-        log::info!("SHA256 Transform: state={:08x?} data={:02x?}", self.state, self.data);
+        log::info!(
+            "SHA256 Transform: state={:08x?} data={:02x?}",
+            self.state,
+            self.data
+        );
 
         let mut m = [0u32; 64];
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..16 {
-            m[i] = u32::from_be_bytes(self.data[4*i..4*(i+1)].try_into().unwrap());
+            m[i] = u32::from_be_bytes(self.data[4 * i..4 * (i + 1)].try_into().unwrap());
             log::trace!("m[{:2}]={:08x}", i, m[i]);
         }
 
         for i in 16..64 {
-            m[i] = sig1(m[i-2]).wrapping_add(m[i-7]).wrapping_add(sig0(m[i-15])).wrapping_add(m[i-16]);
+            m[i] = sig1(m[i - 2])
+                .wrapping_add(m[i - 7])
+                .wrapping_add(sig0(m[i - 15]))
+                .wrapping_add(m[i - 16]);
             log::trace!("m[{:2}]={:08x} sig1({:08x})={:08x} m[{:2}]={:08x} sig0({:08x})={:08x} m[{:2}]={:08x}", i, m[i], m[i-2], sig1(m[i-2]), i-7, m[i-7], m[i-15], sig0(m[i-15]), i-16, m[i-16]);
         }
 
         log::debug!("m = {:08x?}", m);
-        
+
         let mut a = self.state[0];
         let mut b = self.state[1];
         let mut c = self.state[2];
@@ -72,9 +82,16 @@ impl SHA256 {
         let mut h = self.state[7];
 
         for i in 0..64 {
-            let t1 = h.wrapping_add(ep1(e)).wrapping_add(ch(e, f, g)).wrapping_add(K[i]).wrapping_add(m[i]);
+            let t1 = h
+                .wrapping_add(ep1(e))
+                .wrapping_add(ch(e, f, g))
+                .wrapping_add(K[i])
+                .wrapping_add(m[i]);
             let t2 = ep0(a).wrapping_add(maj(a, b, c));
+
+            #[rustfmt::skip]
             log::trace!("Round {:2}: t1={:08x} t2={:08x} k[{:2}]={:08x} m[{:2}]={:08x}", i, t1, t2, i, K[i], i, m[i]);
+
             h = g;
             g = f;
             f = e;
@@ -83,6 +100,7 @@ impl SHA256 {
             c = b;
             b = a;
             a = t1.wrapping_add(t2);
+
             log::debug!("Round {:2}: a={:08x} b={:08x} c={:08x} d={:08x} e={:08x} f={:08x} g={:08x} h={:08x}", i, a, b, c, d, e, f, g, h);
         }
 
@@ -105,14 +123,22 @@ impl Default for SHA256 {
             data: [0u8; 0x40],
             datalen: 0,
             bitlen: 0,
-            state: [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19],
+            state: [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ],
         }
     }
 }
 
 impl Update for SHA256 {
     fn update(&mut self, data: &[u8]) {
-        log::info!("SHA256 Update: datalen={:2} bitlen={:016x} data={:02x?}", self.datalen, self.bitlen, data);
+        log::info!(
+            "SHA256 Update: datalen={:2} bitlen={:016x} data={:02x?}",
+            self.datalen,
+            self.bitlen,
+            data
+        );
 
         for x in data {
             self.data[self.datalen] = *x;
@@ -124,7 +150,11 @@ impl Update for SHA256 {
             }
         }
 
-        log::info!("SHA256 Update: datalen={:2} bitlen={:016x}", self.datalen, self.bitlen);
+        log::info!(
+            "SHA256 Update: datalen={:2} bitlen={:016x}",
+            self.datalen,
+            self.bitlen
+        );
     }
 }
 
@@ -132,7 +162,11 @@ impl HashAlgorithm for SHA256 {
     const DIGEST_SIZE: usize = 32;
 
     fn finalize(mut self) -> [u8; 32] {
-        log::info!("SHA256 Finalize: datalen={:2} bitlen={:016x}", self.datalen, self.bitlen);
+        log::info!(
+            "SHA256 Finalize: datalen={:2} bitlen={:016x}",
+            self.datalen,
+            self.bitlen
+        );
 
         self.bitlen += 8 * self.datalen as u64;
 
