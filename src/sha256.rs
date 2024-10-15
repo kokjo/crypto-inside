@@ -48,10 +48,13 @@ impl SHA256 {
         log::info!("SHA256 Transform: state={:08x?} data={:02x?}", self.state, self.data);
 
         let mut m = [0u32; 64];
+
+        #[allow(clippy::needless_range_loop)]
         for i in 0..16 {
             m[i] = u32::from_be_bytes(self.data[4*i..4*(i+1)].try_into().unwrap());
             log::trace!("m[{:2}]={:08x}", i, m[i]);
         }
+
         for i in 16..64 {
             m[i] = sig1(m[i-2]).wrapping_add(m[i-7]).wrapping_add(sig0(m[i-15])).wrapping_add(m[i-16]);
             log::trace!("m[{:2}]={:08x} sig1({:08x})={:08x} m[{:2}]={:08x} sig0({:08x})={:08x} m[{:2}]={:08x}", i, m[i], m[i-2], sig1(m[i-2]), i-7, m[i-7], m[i-15], sig0(m[i-15]), i-16, m[i-16]);
