@@ -79,76 +79,94 @@ pub fn inv_mix_column(x: u32) -> u32 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AESState(pub [[u8; 4]; 4]);
 
+impl From<[u8; 16]> for AESState {
+    fn from(value: [u8; 16]) -> Self {
+        Self(from_fn(|i| from_fn(|j| value[(j << 2) | i])))
+    }
+}
+
+impl From<[u32; 4]> for AESState {
+    fn from(value: [u32; 4]) -> Self {
+        Self(value.map(u32::to_be_bytes))
+    }
+}
+
+impl From<AESState> for [u8; 16] {
+    fn from(st: AESState) -> Self {
+        from_fn(|i| st.0[i & 3][i >> 2])
+    }
+}
+
+impl From<AESState> for [u32; 4] {
+    fn from(st: AESState) -> Self {
+        st.0.map(u32::from_be_bytes)
+    }
+}
+
 impl AESState {
+    pub fn debug(self, name: &str) -> Self {
+        log::debug!("{}: {:02x?}", name, Into::<[u8; 16]>::into(self));
+        self
+    }
+
     pub fn transpose(self) -> Self {
         Self(from_fn(|i| from_fn(|j| self.0[j][i])))
     }
 
-    pub fn to_bytes(self) -> [u8; 16] {
-        from_fn(|i| self.0[i & 3][i >> 2])
-    }
-
-    pub fn from_bytes(bytes: [u8; 16]) -> Self {
-        Self(from_fn(|i| from_fn(|j| bytes[(j << 2) | i])))
-    }
-
-    pub fn to_words(self) -> [u32; 4] {
-        self.0.map(u32::from_be_bytes)
-    }
-
-    pub fn from_words(words: [u32; 4]) -> Self {
-        Self(words.map(u32::to_be_bytes))
-    }
-
     pub fn map_bytes(self, f: impl Fn(u8) -> u8) -> Self {
-        Self(self.0.map(|arr| arr.map(&f)))
+        let bytes: [u8; 16] = self.into();
+        bytes.map(&f).into()
     }
 
     pub fn map_words(self, f: impl Fn(u32) -> u32) -> Self {
-        Self::from_words(self.to_words().map(f))
+        let words: [u32; 4] = self.into();
+        words.map(&f).into()
     }
 
     pub fn sub_bytes(self) -> Self {
-        self.map_bytes(|byte| SBOX[byte as usize])
+        self.map_bytes(|byte| SBOX[byte as usize]).debug("sub bytes")
     }
 
     pub fn inv_sub_bytes(self) -> Self {
-        self.map_bytes(|byte| SBOX_INV[byte as usize])
+        self.map_bytes(|byte| SBOX_INV[byte as usize]).debug("inv sub bytes")
     }
 
     pub fn mix_columns(self) -> Self {
-        self.transpose().map_words(mix_column).transpose()
+        self.transpose().map_words(mix_column).transpose().debug("mix columns")
     }
 
     pub fn inv_mix_columns(self) -> Self {
-        self.transpose().map_words(inv_mix_column).transpose()
+        self.transpose().map_words(inv_mix_column).transpose().debug("inv min columns")
     }
 
     pub fn shift_rows(self) -> Self {
-        let rows = self.to_words();
-        Self::from_words([
+        let rows: [u32; 4] = self.into();
+        let result: AESState = [
             rows[0].rotate_left(0),
             rows[1].rotate_left(8),
             rows[2].rotate_left(16),
             rows[3].rotate_left(24),
-        ])
+        ].into();
+        result.debug("shift rows")
     }
 
     pub fn inv_shift_rows(self) -> Self {
-        let rows = self.to_words();
-        Self::from_words([
+        let rows: [u32; 4] = self.into();
+        let result: AESState = [
             rows[0].rotate_left(0),
             rows[1].rotate_left(24),
             rows[2].rotate_left(16),
             rows[3].rotate_left(8),
-        ])
+        ].into();
+        result.debug("inv shift rows")
     }
 
     pub fn add_round_key(self, key: [u8; 16]) -> Self{
-        let bytes = self.to_bytes();
-        Self::from_bytes(from_fn(|i| bytes[i] ^ key[i]))
+        let bytes: [u8; 16] = self.into();
+        log::debug!("round key: {:02x?}", key);
+        let result: AESState = from_fn(|i| bytes[i] ^ key[i]).into();
+        result.debug("add round key")
     }
-
 }
 
 pub fn sub_word(word: u32) -> u32 {
@@ -194,23 +212,23 @@ impl<const NK: usize, const NR: usize> AES<NK, NR> where [(); 4*(NR+1)]: {
     }
 
     pub fn encrypt(&self, block: [u8; 16]) -> [u8; 16] {
-        let mut st = AESState::from_bytes(block);
+        let mut st: AESState = block.into();
         st = st.add_round_key(self.0[0]);
         for i in 1..NR {
             st = st.sub_bytes().shift_rows().mix_columns().add_round_key(self.0[i])
         }
         st = st.sub_bytes().shift_rows().add_round_key(self.0[NR]);
-        st.to_bytes()
+        st.into()
     }
 
     pub fn decrypt(&self, block: [u8; 16]) -> [u8; 16] {
-        let mut st = AESState::from_bytes(block);
+        let mut st: AESState = block.into();
         st = st.add_round_key(self.0[NR]).inv_shift_rows().inv_sub_bytes();
         for i in (1..NR).rev() {
             st = st.add_round_key(self.0[i]).inv_mix_columns().inv_shift_rows().inv_sub_bytes();
         }
         st = st.add_round_key(self.0[0]);
-        st.to_bytes()
+        st.into()
     }
 }
 
@@ -249,6 +267,10 @@ mod tests {
 
     use super::*;
 
+    fn init_env_logger() {
+        let _ = env_logger::builder().filter_level(log::LevelFilter::Debug).is_test(true).try_init();
+    }
+
     #[test]
     pub fn test_subbytes() {
         let st0 = AESState([
@@ -282,9 +304,9 @@ mod tests {
 
     #[test]
     pub fn test_add_round_key() {
-        let st0 = AESState::from_bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
-        let st1 = st0.add_round_key([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
-        let st2 = AESState::from_bytes([0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0]);
+        let st0: AESState = [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff].into();
+        let st1: AESState = st0.add_round_key([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
+        let st2: AESState = [0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0].into();
         assert_eq!(st1, st2);
     }
 
@@ -309,9 +331,9 @@ mod tests {
 
     #[test]
     pub fn test_shift_rows_bytes() {
-        let st0 = AESState::from_bytes([0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c]);
-        let st1 = st0.shift_rows();
-        let st2 = AESState::from_bytes([0x63, 0x53, 0xe0, 0x8c, 0x09, 0x60, 0xe1, 0x04, 0xcd, 0x70, 0xb7, 0x51, 0xba, 0xca, 0xd0, 0xe7]);
+        let st0: AESState = [0x64, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c].into();
+        let st1: AESState = st0.shift_rows();
+        let st2: AESState = [0x64, 0x53, 0xe0, 0x8c, 0x09, 0x60, 0xe1, 0x04, 0xcd, 0x70, 0xb7, 0x51, 0xba, 0xca, 0xd0, 0xe7].into();
         assert_eq!(st1, st2);
     }
 
@@ -349,9 +371,9 @@ mod tests {
 
     #[test]
     pub fn test_mix_columns_bytes() {
-        let st0 = AESState::from_bytes([0x63, 0x53, 0xe0, 0x8c, 0x09, 0x60, 0xe1, 0x04, 0xcd, 0x70, 0xb7, 0x51, 0xba, 0xca, 0xd0, 0xe7]);
-        let st1 = st0.mix_columns();
-        let st2 = AESState::from_bytes([0x5f, 0x72, 0x64, 0x15, 0x57, 0xf5, 0xbc, 0x92, 0xf7, 0xbe, 0x3b, 0x29, 0x1d, 0xb9, 0xf9, 0x1a]);
+        let st0: AESState = [0x63, 0x53, 0xe0, 0x8c, 0x09, 0x60, 0xe1, 0x04, 0xcd, 0x70, 0xb7, 0x51, 0xba, 0xca, 0xd0, 0xe7].into();
+        let st1: AESState = st0.mix_columns();
+        let st2: AESState = [0x5f, 0x72, 0x64, 0x15, 0x57, 0xf5, 0xbc, 0x92, 0xf7, 0xbe, 0x3b, 0x29, 0x1d, 0xb9, 0xf9, 0x1a].into();
         assert_eq!(st1, st2);
     }
 
@@ -378,6 +400,7 @@ mod tests {
 
     #[test]
     pub fn test_aes128_encrypt() {
+        init_env_logger();
         let aes = AES128::new([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c]);
         let pt = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34];
         let ct = aes.encrypt(pt);
@@ -386,6 +409,7 @@ mod tests {
 
     #[test]
     pub fn test_aes128_decrypt() {
+        init_env_logger();
         let aes = AES128::new([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c]);
         let ct = [0x39, 0x25, 0x84, 0x1d, 0x02, 0xdc, 0x09, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0x0b, 0x32];
         let pt = aes.decrypt(ct);
@@ -415,6 +439,7 @@ mod tests {
 
     #[test]
     pub fn test_aes192_encrypt() {
+        init_env_logger();
         let aes = AES192::new([
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
@@ -426,6 +451,7 @@ mod tests {
 
     #[test]
     pub fn test_aes192_decrypt() {
+        init_env_logger();
         let aes = AES192::new([
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
@@ -458,6 +484,7 @@ mod tests {
 
     #[test]
     pub fn test_aes256_encrypt() {
+        init_env_logger();
         let aes = AES256::new([
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -469,6 +496,7 @@ mod tests {
 
     #[test]
     pub fn test_aes256_decrypt() {
+        init_env_logger();
         let aes = AES256::new([
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
