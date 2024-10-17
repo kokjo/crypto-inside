@@ -48,7 +48,7 @@ pub fn gfmul(x: u8, mut y: u8) -> u8 {
     let mut z = 0;
     for i in 0..8 {
         if (x >> i) & 1 == 1 {
-            z = z ^ y;
+            z ^= y;
         }
         y = xtime(y);
     }
@@ -93,15 +93,15 @@ impl AESState {
     }
 
     pub fn to_words(self) -> [u32; 4] {
-        self.0.map(|arr| u32::from_be_bytes(arr))
+        self.0.map(u32::from_be_bytes)
     }
 
     pub fn from_words(words: [u32; 4]) -> Self {
-        Self(from_fn(|i| words[i].to_be_bytes()))
+        Self(words.map(u32::to_be_bytes))
     }
 
     pub fn map_bytes(self, f: impl Fn(u8) -> u8) -> Self {
-        Self(self.0.map(|arr| arr.map(|byte| f(byte))))
+        Self(self.0.map(|arr| arr.map(&f)))
     }
 
     pub fn map_words(self, f: impl Fn(u32) -> u32) -> Self {
