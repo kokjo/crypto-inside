@@ -1,7 +1,10 @@
 #![feature(generic_const_exprs)]
+#![feature(generic_arg_infer)]
 
 pub mod hash;
+pub mod cipher;
 pub mod sha256;
+pub mod aes;
 
 use std::{
     fs::File,
