@@ -105,7 +105,7 @@ impl From<AESState> for [u32; 4] {
 
 impl AESState {
     pub fn debug(self, name: &str) -> Self {
-        log::debug!("{}: {:02x?}", name, Into::<[u8; 16]>::into(self));
+        log::debug!("{:15}: {:02x?}", name, Into::<[u8; 16]>::into(self));
         self
     }
 
@@ -163,7 +163,7 @@ impl AESState {
 
     pub fn add_round_key(self, key: [u8; 16]) -> Self{
         let bytes: [u8; 16] = self.into();
-        log::debug!("round key: {:02x?}", key);
+        log::debug!("{:15}: {:02x?}", "round key", key);
         let result: AESState = from_fn(|i| bytes[i] ^ key[i]).into();
         result.debug("add round key")
     }
@@ -194,6 +194,7 @@ impl<const NK: usize, const NR: usize> AES<NK, NR> where [(); 4*(NR+1)]: {
         let mut i = 0;
         while i < NK {
             w[i] = u32::from_be_bytes(from_fn(|j| key[4*i + j]));
+            log::debug!("w[{:02}] = {:08x}", i, w[i]);
             i += 1;
         }
 
@@ -205,6 +206,7 @@ impl<const NK: usize, const NR: usize> AES<NK, NR> where [(); 4*(NR+1)]: {
                 word = sub_word(word)
             }
             w[i] = w[i-NK] ^ word;
+            log::debug!("w[{:02}] = {:08x} word = {:08x}", i, w[i], word);
             i += 1;
         }
 
